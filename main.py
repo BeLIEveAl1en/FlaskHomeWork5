@@ -1,8 +1,8 @@
-from flask import Flask, request, jsonify
-from pydantic import BaseModel, ValidationError, Field
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
 from typing import List, Optional
 
-app = Flask(__name__)
+app = FastAPI()
 
 
 class Task(BaseModel):
@@ -21,51 +21,44 @@ class TaskInput(BaseModel):
 tasks = []
 
 
-@app.route('/tasks', methods=['GET'])
+@app.get('/tasks', response_model=List[Task])
 def get_tasks():
-    return jsonify(tasks)
+    return tasks
 
 
-@app.route('/tasks/<int:task_id>', methods=['GET'])
-def get_task(task_id):
+@app.get('/tasks/{task_id}', response_model=Task)
+def get_task(task_id: int):
     task = next((task for task in tasks if task['id'] == task_id), None)
     if task:
-        return jsonify(task)
+        return task
     else:
-        return jsonify({"error": "Task not found"}), 404
+        raise HTTPException(status_code=404, detail="Task not found")
 
 
-@app.route('/tasks', methods=['POST'])
-def create_task():
-    try:
-        task_input = TaskInput(**request.json)
-        task = Task(id=len(tasks) + 1, **task_input.dict(), status=False)
-        tasks.append(task.dict())
-        return jsonify(task.dict()), 201
-    except ValidationError as e:
-        return jsonify({"error": e.errors()}), 400
+@app.post('/tasks', response_model=Task)
+def create_task(task_input: TaskInput):
+    task = Task(id=len(tasks) + 1, **task_input.dict(), status=False)
+    tasks.append(task.dict())
+    return task
 
 
-@app.route('/tasks/<int:task_id>', methods=['PUT'])
-def update_task(task_id):
+@app.put('/tasks/{task_id}', response_model=Task)
+def update_task(task_id: int, task_input: TaskInput):
     task = next((task for task in tasks if task['id'] == task_id), None)
     if task:
-        try:
-            task_input = TaskInput(**request.json)
-            task.update(task_input.dict())
-            return jsonify(task), 200
-        except ValidationError as e:
-            return jsonify({"error": e.errors()}), 400
+        task.update(task_input.dict())
+        return task
     else:
-        return jsonify({"error": "Task not found"}), 404
+        raise HTTPException(status_code=404, detail="Task not found")
 
 
-@app.route('/tasks/<int:task_id>', methods=['DELETE'])
-def delete_task(task_id):
+@app.delete('/tasks/{task_id}', status_code=204)
+def delete_task(task_id: int):
     global tasks
     tasks = [task for task in tasks if task['id'] != task_id]
-    return '', 204
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    import uvicorn
+
+    uvicorn.run(app, host="127.0.0.1", port=8000)
